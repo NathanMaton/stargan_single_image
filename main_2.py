@@ -1,3 +1,12 @@
+'''
+TO-DO:
+GET BETTER RESULTS
+CLEAN UP THIS CODE TO GET THE SINGLE PROCESSING EASIER TO USE
+REDO AS A PR TO ORIGINAL REPO
+'''
+
+
+
 import os
 import argparse
 from solver import Solver
