@@ -1,0 +1,6 @@
+.DS_Store
+.ipynb_checkpoints
+__pycache__/
+data/celeba
+stargan/
+stargan_celeba_256/models/200000-D.ckpt

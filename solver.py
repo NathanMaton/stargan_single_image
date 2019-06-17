@@ -73,7 +73,7 @@ class Solver(object):
         """Create a generator and a discriminator."""
         if self.dataset in ['CelebA', 'RaFD']:
             self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num)
-            self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim, self.d_repeat_num) 
+            self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim, self.d_repeat_num)
         elif self.dataset in ['Both']:
             self.G = Generator(self.g_conv_dim, self.c_dim+self.c2_dim+2, self.g_repeat_num)   # 2 for mask vector.
             self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim+self.c2_dim, self.d_repeat_num)
@@ -82,7 +82,7 @@ class Solver(object):
         self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.d_lr, [self.beta1, self.beta2])
         self.print_network(self.G, 'G')
         self.print_network(self.D, 'D')
-            
+
         self.G.to(self.device)
         self.D.to(self.device)
 
@@ -95,13 +95,15 @@ class Solver(object):
         print(name)
         print("The number of parameters: {}".format(num_params))
 
-    def restore_model(self, resume_iters):
+    # ADDED use_discriminator=FALSE AND THE IF CONDITION HERE.
+    def restore_model(self, resume_iters, use_discriminator=False):
         """Restore the trained generator and discriminator."""
         print('Loading the trained models from step {}...'.format(resume_iters))
         G_path = os.path.join(self.model_save_dir, '{}-G.ckpt'.format(resume_iters))
-        D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(resume_iters))
         self.G.load_state_dict(torch.load(G_path, map_location=lambda storage, loc: storage))
-        self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
+        if use_discriminator:
+            D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(resume_iters))
+            self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
 
     def build_tensorboard(self):
         """Build a tensorboard logger."""
@@ -268,11 +270,11 @@ class Solver(object):
             loss['D/loss_fake'] = d_loss_fake.item()
             loss['D/loss_cls'] = d_loss_cls.item()
             loss['D/loss_gp'] = d_loss_gp.item()
-            
+
             # =================================================================================== #
             #                               3. Train the generator                                #
             # =================================================================================== #
-            
+
             if (i+1) % self.n_critic == 0:
                 # Original-to-target domain.
                 x_fake = self.G(x_real, c_trg)
@@ -339,7 +341,7 @@ class Solver(object):
                 print ('Decayed learning rates, g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
     def train_multi(self):
-        """Train StarGAN with multiple datasets."""        
+        """Train StarGAN with multiple datasets."""
         # Data iterators.
         celeba_iter = iter(self.celeba_loader)
         rafd_iter = iter(self.rafd_loader)
@@ -373,10 +375,10 @@ class Solver(object):
                 # =================================================================================== #
                 #                             1. Preprocess input data                                #
                 # =================================================================================== #
-                
+
                 # Fetch real images and labels.
                 data_iter = celeba_iter if dataset == 'CelebA' else rafd_iter
-                
+
                 try:
                     x_real, label_org = next(data_iter)
                 except:
@@ -445,7 +447,7 @@ class Solver(object):
                 loss['D/loss_fake'] = d_loss_fake.item()
                 loss['D/loss_cls'] = d_loss_cls.item()
                 loss['D/loss_gp'] = d_loss_gp.item()
-            
+
                 # =================================================================================== #
                 #                               3. Train the generator                                #
                 # =================================================================================== #
@@ -520,17 +522,42 @@ class Solver(object):
                 self.update_lr(g_lr, d_lr)
                 print ('Decayed learning rates, g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
+    # ADDED test_single method (copy of test method with mods)
+    def test_single(self):
+        """Translate single image"""
+        self.restore_model(self.test_iters)
+        data_loader = self.celeba_loader
+
+        with torch.no_grad():
+            for i, (x_real, c_org) in enumerate(data_loader):
+
+                # Prepare input images and target domain labels.
+                x_real = x_real.to(self.device)
+                c_trg_list = self.create_labels(c_org, self.c_dim, self.dataset, self.selected_attrs)
+
+                # Translate images.
+                x_fake_list = [x_real]
+                for c_trg in c_trg_list:
+                    x_fake_list.append(self.G(x_real, c_trg))
+
+                # Save the translated images.
+                x_concat = torch.cat(x_fake_list, dim=3)
+                result_path = os.path.join(self.result_dir, '{}-images.jpg'.format(i+1))
+                save_image(self.denorm(x_concat.data.cpu()), result_path, nrow=1, padding=0)
+                print('Saved real and fake images into {}...'.format(result_path))
+
+
     def test(self):
         """Translate images using StarGAN trained on a single dataset."""
         # Load the trained generator.
         self.restore_model(self.test_iters)
-        
+
         # Set data loader.
         if self.dataset == 'CelebA':
             data_loader = self.celeba_loader
         elif self.dataset == 'RaFD':
             data_loader = self.rafd_loader
-        
+
         with torch.no_grad():
             for i, (x_real, c_org) in enumerate(data_loader):
 
@@ -553,7 +580,7 @@ class Solver(object):
         """Translate images using StarGAN trained on multiple datasets."""
         # Load the trained generator.
         self.restore_model(self.test_iters)
-        
+
         with torch.no_grad():
             for i, (x_real, c_org) in enumerate(self.celeba_loader):
 
@@ -580,3 +607,7 @@ class Solver(object):
                 result_path = os.path.join(self.result_dir, '{}-images.jpg'.format(i+1))
                 save_image(self.denorm(x_concat.data.cpu()), result_path, nrow=1, padding=0)
                 print('Saved real and fake images into {}...'.format(result_path))
+
+if __name__ == '__main__':
+    pass
+    solver = Solver()
