@@ -18,6 +18,8 @@ Currently has a boss and wife in the input dataset, change those to what you wan
 
 Original readme below.
 
+Results I created stored in stargan/test_results/
+
 <p align="center"><img width="100%" src="jpg/main.jpg" /></p>
 
 <br/>
